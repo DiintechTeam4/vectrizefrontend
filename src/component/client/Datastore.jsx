@@ -5,10 +5,12 @@ import {
   FaEdit, 
   FaTrash, 
   FaSpinner, 
-  FaFileAlt 
+  FaFileAlt,
+  FaFolder,
+  FaFolderPlus
 } from "react-icons/fa";
 
-export default function Datastore() {
+export default function Datastore({ selectedProjectId, onProjectCreated }) {
   const token = sessionStorage.getItem("clienttoken")
   const [showAddContentModal, setShowAddContentModal] = useState(false);
   const [newContentData, setNewContentData] = useState({
@@ -27,6 +29,19 @@ export default function Datastore() {
   const [showEditContentModal, setShowEditContentModal] = useState(false);
   const [editingContent, setEditingContent] = useState(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectForAdd, setSelectedProjectForAdd] = useState("");
+  
+  // New states for integrated project management
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newProjectData, setNewProjectData] = useState({
+    name: "",
+    description: "",
+  });
+  const [createProjectError, setCreateProjectError] = useState(null);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   // Helper function to get badge color based on content type
   const getTypeBadgeColor = (type) => {
@@ -50,21 +65,118 @@ export default function Datastore() {
     }
   };
 
-  // Fetch datastore contents on component mount
+  // Fetch datastore contents on component mount and when project changes
   useEffect(() => {
-    fetchDatastoreContents();
+    if (selectedProjectId) {
+      fetchDatastoreContents();
+      fetchSelectedProject();
+    }
+  }, [selectedProjectId]);
+
+  // Fetch all projects for dropdown and check if any exist
+  useEffect(() => {
+    fetchProjects();
   }, []);
+
+  // Fetch selected project details
+  const fetchSelectedProject = async () => {
+    try {
+      const response = await axios.get(
+        `http://localhost:8000/api/v1/projects/${selectedProjectId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      if (response.data.success) {
+        setSelectedProject(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching project details:", error);
+    }
+  };
+
+  // Fetch all projects
+  const fetchProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const response = await axios.get(
+        "http://localhost:8000/api/v1/projects",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      if (response.data.success) {
+        setProjects(response.data.data);
+        // If no projects exist and no project is selected, show create project modal
+        if (response.data.data.length === 0 && !selectedProjectId) {
+          setShowCreateProjectModal(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Create new project
+  const handleCreateProject = async () => {
+    try {
+      setCreatingProject(true);
+      setCreateProjectError(null);
+
+      const response = await axios.post(
+        "http://localhost:8000/api/v1/projects",
+        newProjectData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setShowCreateProjectModal(false);
+        setNewProjectData({ name: "", description: "" });
+        await fetchProjects(); // Refresh projects list
+        // Automatically select the newly created project
+        if (response.data.data._id) {
+          // Call the parent's project selection handler
+          if (onProjectCreated && typeof onProjectCreated === 'function') {
+            onProjectCreated(response.data.data._id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error creating project:", error);
+      setCreateProjectError(
+        error.response?.data?.message || "Failed to create project"
+      );
+    } finally {
+      setCreatingProject(false);
+    }
+  };
 
   // Fetch datastore contents
   const fetchDatastoreContents = async () => {
     try {
       setLoadingDatastore(true);
       setDatastoreError(null);
-      const response = await axios.get(
-        "http://localhost:8000/api/v1/datastore/content"
-      ,{
-        headers:{
-            Authorization: `Bearer ${token}`
+      
+      // Build URL with project filter if selected
+      let url = "http://localhost:8000/api/v1/datastore/content";
+      if (selectedProjectId) {
+        url += `?projectId=${selectedProjectId}`;
+      }
+      
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
       });
       if (response.data.success) {
@@ -111,6 +223,7 @@ export default function Datastore() {
       const formData = new FormData();
       formData.append("type", editingContent.type);
       formData.append("title", editingContent.title);
+      formData.append("projectId", selectedProjectId);
 
       if (editingContent.type === "Text") {
         formData.append("content", editingContent.content);
@@ -372,7 +485,39 @@ export default function Datastore() {
               </svg>
             </button>
           </div>
-          <div className="px-6 py-4">
+                     <div className="px-6 py-4">
+             {/* Show current project info if inside a project */}
+             {selectedProjectId && selectedProject && (
+               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                 <p className="text-sm text-blue-800">
+                   <strong>Adding to:</strong> {selectedProject.name}
+                 </p>
+                 {selectedProject.description && (
+                   <p className="text-xs text-blue-600 mt-1">{selectedProject.description}</p>
+                 )}
+               </div>
+             )}
+             
+             {/* Project Selection - Only show if no project is currently selected */}
+             {!selectedProjectId && (
+               <div className="mb-4">
+                 <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+                 <select
+                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                   value={selectedProjectForAdd}
+                   onChange={(e) => setSelectedProjectForAdd(e.target.value)}
+                   disabled={addingContent}
+                 >
+                   <option value="">Select a project</option>
+                   {projects.map((project) => (
+                     <option key={project._id} value={project._id}>
+                       {project.name}
+                     </option>
+                   ))}
+                 </select>
+               </div>
+             )}
+
             {/* Content Type Selection */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Content Type</label>
@@ -512,8 +657,16 @@ export default function Datastore() {
     );
   };
 
-  // Add content to datastore
-  const handleAddContent = async () => {
+     // Add content to datastore
+   const handleAddContent = async () => {
+     // Determine which project to use
+     const projectToUse = selectedProjectId || selectedProjectForAdd;
+     
+     if (!projectToUse) {
+       setAddContentError("Please select a project first");
+       return;
+     }
+
     if (!newContentData.title) {
       setAddContentError("Title is required");
       return;
@@ -551,9 +704,10 @@ export default function Datastore() {
       setAddingContent(true);
       setAddContentError(null);
 
-      const formData = new FormData();
-      formData.append("type", selectedContentType);
-      formData.append("title", newContentData.title);
+             const formData = new FormData();
+       formData.append("type", selectedContentType);
+       formData.append("title", newContentData.title);
+       formData.append("projectId", projectToUse);
 
       if (selectedContentType === "Text") {
         formData.append("content", newContentData.content);
@@ -575,13 +729,17 @@ export default function Datastore() {
         }
       );
 
-      if (response.data.success) {
-        fetchDatastoreContents();
-        setNewContentData({ title: "", content: "" });
-        setSelectedContentType("Text");
-        setSelectedFile(null);
-        setShowAddContentModal(false);
-      } else {
+             if (response.data.success) {
+         fetchDatastoreContents();
+         setNewContentData({ title: "", content: "" });
+         setSelectedContentType("Text");
+         setSelectedFile(null);
+         // Only reset selectedProjectForAdd if we were not in a specific project
+         if (!selectedProjectId) {
+           setSelectedProjectForAdd("");
+         }
+         setShowAddContentModal(false);
+       } else {
         setAddContentError(response.data.message || "Error adding content");
       }
     } catch (error) {
@@ -599,7 +757,26 @@ export default function Datastore() {
       <div className="border-0 shadow-sm rounded-lg min-h-screen w-full overflow-hidden">
         <div className="p-2 md:p-3 lg:p-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-0">Datastore</h3>
+                                      <div className="flex items-center gap-3">
+               {selectedProjectId && (
+                 <button
+                   onClick={() => onProjectCreated && onProjectCreated(null)}
+                   className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                 >
+                   <FaFolder />
+                 </button>
+               )}
+               <div>
+                 <h3 className="text-xl font-bold text-gray-900 mb-0">
+                   {selectedProjectId ? "Project Datastore" : "Select a Project"}
+                 </h3>
+                 {selectedProject && (
+                   <p className="text-sm text-gray-600 mt-1">
+                     {selectedProject.name} - {selectedProject.description}
+                   </p>
+                 )}
+               </div>
+             </div>
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
               <div className="relative">
                 <input
@@ -660,8 +837,13 @@ export default function Datastore() {
                 )}
               </div>
               <button
-                className="w-full md:w-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center"
-                onClick={() => setShowAddContentModal(true)}
+                className={`w-full md:w-auto px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center ${
+                  selectedProjectId 
+                    ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500" 
+                    : "bg-gray-400 text-white cursor-not-allowed"
+                }`}
+                onClick={() => selectedProjectId && setShowAddContentModal(true)}
+                disabled={!selectedProjectId}
               >
                 <FaPlus className="mr-2" /> Add Content
               </button>
@@ -673,7 +855,87 @@ export default function Datastore() {
             </div>
           )}
 
-          {loadingDatastore ? (
+          {!selectedProjectId ? (
+            <div className="text-center py-5">
+              {loadingProjects ? (
+                <>
+                  <FaSpinner className="animate-spin text-4xl text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500">Loading projects...</p>
+                </>
+              ) : projects.length === 0 ? (
+                <>
+                  <FaFolderPlus className="text-4xl text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">No projects found. Create your first project to get started.</p>
+                  <button
+                    onClick={() => setShowCreateProjectModal(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    <FaPlus className="inline mr-2" />
+                    Create Your First Project
+                  </button>
+                </>
+                             ) : (
+                 <>
+                   <div className="mb-6">
+                     <div className="flex justify-between items-center mb-4">
+                       <h3 className="text-lg font-semibold text-gray-900">
+                         Your Projects ({projects.length})
+                       </h3>
+                       <button
+                         onClick={() => setShowCreateProjectModal(true)}
+                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center"
+                       >
+                         <FaPlus className="mr-2" />
+                         Create New Project
+                       </button>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                       {projects.map((project) => (
+                         <div
+                           key={project._id}
+                           onClick={() => onProjectCreated && onProjectCreated(project._id)}
+                           className="bg-white p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
+                         >
+                           <div className="flex items-center justify-between mb-2">
+                             <div className="flex items-center">
+                               <FaFolder className="text-blue-500 mr-2" />
+                               <h4 className="font-medium text-gray-900">{project.name}</h4>
+                             </div>
+                             <span className={`px-2 py-1 rounded-full text-xs ${
+                               project.status === 'active' ? 'bg-green-100 text-green-800' :
+                               project.status === 'archived' ? 'bg-gray-100 text-gray-800' :
+                               'bg-blue-100 text-blue-800'
+                             }`}>
+                               {project.status}
+                             </span>
+                           </div>
+                           {project.description && (
+                             <p className="text-sm text-gray-600 mb-3">{project.description}</p>
+                           )}
+                           <div className="flex items-center justify-between text-xs text-gray-500">
+                             <span>Created: {new Date(project.createdAt).toLocaleDateString()}</span>
+                             <span className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                               Click to open →
+                             </span>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                     {projects.length > 0 && (
+                       <div className="mt-6 text-center">
+                         <p className="text-sm text-gray-600 mb-2">
+                           Click on any project to add content to it
+                         </p>
+                         <p className="text-xs text-gray-500">
+                           You can create multiple projects and add different types of content to each one
+                         </p>
+                       </div>
+                     )}
+                   </div>
+                 </>
+               )}
+            </div>
+          ) : loadingDatastore ? (
             <div className="text-center py-5">
               <FaSpinner className="animate-spin inline-block text-2xl mb-3" />
               <p>Loading datastore contents...</p>
@@ -769,19 +1031,109 @@ export default function Datastore() {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="text-center py-5">
-              <p className="text-gray-500">No content added yet.</p>
-              <p className="text-gray-500">
-                Click "Add Content" to add your first item.
-              </p>
-            </div>
-          )}
+                     ) : (
+             <div className="text-center py-5">
+               <p className="text-gray-500">No content added to this project yet.</p>
+               <p className="text-gray-500 mb-4">
+                 Click "Add Content" to add your first item to this project.
+               </p>
+               <div className="text-xs text-gray-400">
+                 <p>💡 Tip: Use the folder icon (↩️) to go back and create more projects</p>
+               </div>
+             </div>
+           )}
         </div>
       </div>
       {renderAddContentModal()}
       {renderDeleteContentConfirmModal()}
       {renderEditContentModal()}
+      
+      {/* Create Project Modal */}
+      {showCreateProjectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                         <div className="mb-4 relative">
+               <h3 className="text-lg font-semibold text-gray-900 mb-2">Create New Project</h3>
+               <p className="text-sm text-gray-600">You can create multiple projects to organize your content</p>
+                              <button
+                 onClick={() => setShowCreateProjectModal(false)}
+                 className="absolute top-0 right-0 text-gray-400 hover:text-gray-600"
+               >
+                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                 </svg>
+               </button>
+            </div>
+            
+            {createProjectError && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+                {createProjectError}
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  value={newProjectData.name}
+                  onChange={(e) => setNewProjectData({...newProjectData, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter project name"
+                  disabled={creatingProject}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={newProjectData.description}
+                  onChange={(e) => setNewProjectData({...newProjectData, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter project description (optional)"
+                  rows={3}
+                  disabled={creatingProject}
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateProjectModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                disabled={creatingProject}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateProject}
+                disabled={!newProjectData.name.trim() || creatingProject}
+                className={`px-4 py-2 rounded-md transition-colors flex items-center ${
+                  !newProjectData.name.trim() || creatingProject
+                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {creatingProject ? (
+                  <>
+                    <FaSpinner className="animate-spin mr-2" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <FaPlus className="mr-2" />
+                    Create Project
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

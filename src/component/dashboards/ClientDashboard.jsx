@@ -57,6 +57,8 @@ const ClientDashboard = ({ onLogout }) => {
   });
   const [addModelLoading, setAddModelLoading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [currentView, setCurrentView] = useState("overview"); // overview, projects, datastore
 
   // Fetch client profile data
   const fetchClientProfile = async () => {
@@ -137,17 +139,39 @@ const ClientDashboard = ({ onLogout }) => {
     if (isMobile) {
       setIsSidebarOpen(false);
     }
+    
+    // Handle view changes
+    if (tab === "Datastore") {
+      setCurrentView("datastore");
+    } else {
+      setCurrentView("overview");
+    }
   };
+
+  const handleProjectSelect = (projectId) => {
+    setSelectedProjectId(projectId);
+    if (projectId) {
+      setCurrentView("datastore");
+      setActiveTab("Datastore");
+    }
+  };
+
+  const handleProjectCreated = (projectId) => {
+    setSelectedProjectId(projectId);
+    setCurrentView("datastore");
+    setActiveTab("Datastore");
+  };
+
+
 
   // Main navigation items
   const mainNavItems = [
     { name: "Overview", icon: <FaHome /> },
     { name: "Business Profile", icon: <FaBuilding /> },
+    { name: "Datastore", icon: <FaDatabase /> },
     { name: "Chats", icon: <FaUsers /> },
     { name: "Enquiry", icon: <FaUsers /> },
     { name: "History", icon: <FaUsers /> },
-    { name: "Datastore", icon: <FaUsers /> },
-
   ];
 
   // Bottom navigation items
@@ -528,8 +552,13 @@ const ClientDashboard = ({ onLogout }) => {
                   </div>
                 </div>
               )}
+
+
               {activeTab === "Datastore" && (
-                <Datastore/>
+                <Datastore 
+                  selectedProjectId={selectedProjectId} 
+                  onProjectCreated={handleProjectCreated}
+                />
               )}
 
              
