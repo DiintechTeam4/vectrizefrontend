@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAsyncError, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from '../../config';
+import WebScraper from '../tools/WebScraper';
 import {
   FaChartBar,
   FaDatabase,
@@ -698,6 +699,11 @@ const AdminDashboard = ({ user, onLogout }) => {
                   <p className="text-sm text-gray-600">18% increase from last week</p>
                 </div>
               </div>
+            )}
+
+            {/* Tools Section */}
+            {activeTab === "Tools" && (
+              <WebScraper />
             )}
 
             {/* Client Table */}
