@@ -984,20 +984,20 @@ export default function Datastore({ selectedProjectId, onProjectCreated }) {
                         {(item.type === "Image" ||
                           item.type === "Video" ||
                           item.type === "PDF") && (
-                          <span>
-                            File: {item.metadata?.fileName || item.content}
-                          </span>
+                          <a href={item.content} target="_blank" rel="noopener noreferrer">
+                            File: {item.metadata?.fileName}
+                          </a>
                         )}
                         {(item.type === "YouTube" ||
                           item.type === "Link" ||
                           item.type === "Website") && (
                           <a
-                            href={item.content}
+                            href={item.metadata?.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-800 truncate block max-w-full"
                           >
-                            {item.content}
+                            {item.metadata?.url}
                           </a>
                         )}
                       </td>
