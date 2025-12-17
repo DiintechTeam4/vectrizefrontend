@@ -31,9 +31,11 @@ const Admin = () => {
           clearAuth();
         }
       }
-      
-      setIsLoading(false);
+      else{
       setIsAuthenticated(false);
+      }
+      setIsLoading(false);
+
     };
     
     initializeAuth();
